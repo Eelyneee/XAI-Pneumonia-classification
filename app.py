@@ -72,7 +72,6 @@ def preprocess_image(uploaded_image):
     
     return input_tensor
 
-
 def load_images_from_demo_folder(new_demo_folder):
     # Initialize ImageFolder with the test folder
     dataset = torchvision.datasets.ImageFolder(
