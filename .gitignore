@@ -1,0 +1,3 @@
+.venv
+.DS_Store
+vgg16_pneumonia_model.pth
