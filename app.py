@@ -15,6 +15,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
+import gdown
 
 
 # Prepare data path
@@ -51,7 +52,15 @@ class VGG16Model(nn.Module):
 @st.cache_resource
 def load_model():
     model = VGG16Model()  # Load the VGG16 model
-    model.load_state_dict(torch.load('./vgg16_pneumonia_model.pth', map_location=torch.device('cpu')))
+    
+    file_id = '1o5pWPFJwNFKKtf0DCjzIrC9_CFqae5D5'
+    url = f'https://drive.google.com/uc?export=download&id={file_id}'
+    output_path = 'vgg16_pneumonia_model.pth' 
+    gdown.download(url, output_path, quiet=False)
+    model.load_state_dict(torch.load('vgg16_pneumonia_model.pth', map_location=torch.device('cpu')))
+
+
+    # model.load_state_dict(torch.load('./vgg16_pneumonia_model.pth', map_location=torch.device('cpu')))
     model.eval()  # Set the model to evaluation mode
     return model
 

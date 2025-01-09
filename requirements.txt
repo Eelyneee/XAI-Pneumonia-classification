@@ -1,5 +1,6 @@
 altair==5.5.0
 attrs==24.3.0
+beautifulsoup4==4.12.3
 blinker==1.9.0
 cachetools==5.5.0
 certifi==2024.12.14
@@ -11,6 +12,7 @@ cycler==0.12.1
 filelock==3.16.1
 fonttools==4.55.3
 fsspec==2024.12.0
+gdown==5.2.0
 gitdb==4.0.12
 GitPython==3.1.44
 idna==3.10
@@ -38,6 +40,7 @@ pyarrow==18.1.0
 pydeck==0.9.1
 Pygments==2.19.1
 pyparsing==3.2.1
+PySocks==1.7.1
 python-dateutil==2.9.0.post0
 pytz==2024.2
 referencing==0.35.1
@@ -51,6 +54,7 @@ setuptools==75.7.0
 six==1.17.0
 slicer==0.0.8
 smmap==5.0.2
+soupsieve==2.6
 streamlit==1.41.1
 sympy==1.13.1
 tenacity==9.0.0
