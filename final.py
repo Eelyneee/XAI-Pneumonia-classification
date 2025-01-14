@@ -11,9 +11,16 @@ import torchvision
 from torchvision.models.feature_extraction import create_feature_extractor
 from io import BytesIO
 import os
+from sklearn.metrics import confusion_matrix, classification_report
+import seaborn as sns
+import pandas as pd
+import matplotlib.pyplot as plt
+import gdown
+
 
 # Prepare data path
-new_test_folder = './images'
+new_demo_folder = './demo'
+new_test_folder = './test-data/data'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Define the VGG16 model
@@ -45,7 +52,15 @@ class VGG16Model(nn.Module):
 @st.cache_resource
 def load_model():
     model = VGG16Model()  # Load the VGG16 model
-    model.load_state_dict(torch.load('./vgg16_pneumonia_model.pth', map_location=torch.device('cpu')))
+    
+    file_id = '1o5pWPFJwNFKKtf0DCjzIrC9_CFqae5D5'
+    url = f'https://drive.google.com/uc?export=download&id={file_id}'
+    output_path = 'vgg16_pneumonia_model.pth' 
+    gdown.download(url, output_path, quiet=False)
+    model.load_state_dict(torch.load('vgg16_pneumonia_model.pth', map_location=torch.device('cpu')))
+
+
+    # model.load_state_dict(torch.load('./vgg16_pneumonia_model.pth', map_location=torch.device('cpu')))
     model.eval()  # Set the model to evaluation mode
     return model
 
@@ -66,11 +81,10 @@ def preprocess_image(uploaded_image):
     
     return input_tensor
 
-
-def load_images_from_test_folder(new_test_folder):
+def load_images_from_demo_folder(new_demo_folder):
     # Initialize ImageFolder with the test folder
     dataset = torchvision.datasets.ImageFolder(
-        root=new_test_folder,
+        root=new_demo_folder,
         transform=transforms.Compose([
             transforms.Resize((255, 255)),
             transforms.ToTensor(),
@@ -99,6 +113,72 @@ def load_images_from_test_folder(new_test_folder):
     all_images = normal_images + pneumonia_images
     
     return all_images, dataset.class_to_idx, dataset.classes, image_paths
+
+def load_images_from_test_folder(new_test_folder):
+    dataset = torchvision.datasets.ImageFolder(
+        root=new_test_folder,
+        transform=transforms.Compose([
+            transforms.Resize((255, 255)),
+            transforms.ToTensor(),
+        ])
+    )
+    
+    images = []
+    labels = []
+    image_paths = []
+    
+    for img, label in dataset:
+        image_paths.append(dataset.imgs[dataset.targets.index(label)][0])
+        images.append(img)
+        labels.append(label)
+    
+    return images, labels, dataset.class_to_idx, dataset.classes, image_paths
+
+# Confusion Matrix Plot Function
+def plot_confusion_matrix(model, images, true_labels, class_names):
+    model.eval()
+    all_preds = []
+    all_labels = []
+    
+    with torch.no_grad():
+        for img, label in zip(images, true_labels):
+            img_tensor = img.unsqueeze(0).to(device)
+            output = model(img_tensor)
+            _, preds = torch.max(output, 1)
+            all_preds.append(preds.item())
+            all_labels.append(label)
+    
+    cm = confusion_matrix(all_labels, all_preds)
+    
+    cm_df = pd.DataFrame(cm, index=class_names, columns=class_names)
+    
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(cm_df, annot=True, fmt='d', cmap='Blues', cbar=False, annot_kws={'size': 14})
+    plt.title('Confusion Matrix')
+    st.caption("Confusion Matrix")
+    st.pyplot(plt)
+
+def display_classification_report(model, images, true_labels, class_names):
+    model.eval()
+    all_preds = []
+    all_labels = []
+    
+    with torch.no_grad():
+        for img, label in zip(images, true_labels):
+            img_tensor = img.unsqueeze(0).to(device)
+            output = model(img_tensor)
+            _, preds = torch.max(output, 1)
+            all_preds.append(preds.item())
+            all_labels.append(label)
+    
+    # Generate classification report
+    report = classification_report(all_labels, all_preds, target_names=class_names, output_dict=True)
+    report_df = pd.DataFrame(report).transpose()
+    
+    # Display the classification report as a table
+    st.caption("Classification Report")
+    st.dataframe(report_df)
+
 
 # Function to extract features and predictions from model
 def get_model_outputs(model, img_tensor, layer_name):
@@ -179,6 +259,17 @@ def visualize_saliency_and_gradcam_map(model, image, idx_to_cls_names, image_nam
     # Display the selected image and its results
     st.markdown(f"Original Class: **:blue[{original_class_label}]**  | Predicted Class: **:green[{idx_to_cls_names[predicted_class]}]**")
 
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        if st.checkbox('Show Confusion Matrix'):
+            images, labels, class_to_idx, classes, image_paths = load_images_from_test_folder(new_test_folder)
+            plot_confusion_matrix(model, images, labels, classes)
+
+    with col2:
+        if st.checkbox('Show Classification Report'):
+            images, labels, class_to_idx, classes, image_paths = load_images_from_test_folder(new_test_folder)
+            display_classification_report(model, images, labels, classes)
+
     col1, col2, col3 = st.columns(3)
     with col1:
         st.subheader("Original Image")
@@ -219,7 +310,7 @@ def visualize_saliency_and_gradcam_map(model, image, idx_to_cls_names, image_nam
             st.image(buf, caption=f"Grad-CAM Heatmap: {idx_to_cls_names[predicted_class]}", width=250)
             plt.close(fig)
 
-images, class_to_idx, classes, image_paths = load_images_from_test_folder(new_test_folder)
+images, class_to_idx, classes, image_paths = load_images_from_demo_folder(new_demo_folder)
 idx_to_cls_names = {idx: cls for cls, idx in class_to_idx.items()}
 uploaded_image = None
 input_img = None
@@ -250,6 +341,7 @@ with col1:
     # Extract all convolutional layers
     layers = [name for name, module in model.named_modules() if isinstance(module, torch.nn.Conv2d)]
     layer_name = st.selectbox("Select Convolutional Layer for Grad-CAM", layers, index=len(layers)-1)
+    st.caption("Default: feature.28")
 
 
 with col2:

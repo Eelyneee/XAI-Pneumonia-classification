@@ -152,7 +152,6 @@ def plot_confusion_matrix(model, images, true_labels, class_names):
     cm = confusion_matrix(all_labels, all_preds)
     
     cm_df = pd.DataFrame(cm, index=class_names, columns=class_names)
-    st.session_state.confusion_matrix = cm_df
     
     plt.figure(figsize=(6, 5))
     sns.heatmap(cm_df, annot=True, fmt='d', cmap='Blues', cbar=False, annot_kws={'size': 14})
@@ -176,42 +175,10 @@ def display_classification_report(model, images, true_labels, class_names):
     # Generate classification report
     report = classification_report(all_labels, all_preds, target_names=class_names, output_dict=True)
     report_df = pd.DataFrame(report).transpose()
-
-    st.session_state.classification_report = report_df
     
     # Display the classification report as a table
     st.caption("Classification Report")
     st.dataframe(report_df)
-
-def compute_model_performance(model, test_folder):
-    """
-    Computes and stores the Confusion Matrix and Classification Report.
-    """
-    # Load images and labels from the test folder
-    images, labels, class_to_idx, classes, image_paths = load_images_from_test_folder(test_folder)
-    
-    # Compute Confusion Matrix
-    all_preds = []
-    all_labels = []
-    with torch.no_grad():
-        for img, label in zip(images, labels):
-            img_tensor = img.unsqueeze(0).to(device)
-            output = model(img_tensor)
-            _, preds = torch.max(output, 1)
-            all_preds.append(preds.item())
-            all_labels.append(label)
-    
-    cm = confusion_matrix(all_labels, all_preds)
-    cm_df = pd.DataFrame(cm, index=classes, columns=classes)
-    
-    # Compute Classification Report
-    report = classification_report(all_labels, all_preds, target_names=classes, output_dict=True)
-    report_df = pd.DataFrame(report).transpose()
-    
-    # Store results in session state
-    st.session_state.confusion_matrix = cm_df
-    st.session_state.classification_report = report_df
-
 
 def display_model_performance(model, original_class_label, idx_to_cls_names,predicted_class):
     """
@@ -220,39 +187,20 @@ def display_model_performance(model, original_class_label, idx_to_cls_names,pred
     # Load images and labels from the test folder
     images, labels, class_to_idx, classes, image_paths = load_images_from_test_folder(new_test_folder)
 
-    if st.session_state.confusion_matrix is None or st.session_state.classification_report is None:
-        compute_model_performance(model, new_test_folder)
-
     st.markdown("---")
     # Display the selected image and its results
     st.markdown(f"Original Class: **:blue[{original_class_label}]**  | Predicted Class: **:green[{idx_to_cls_names[predicted_class]}]**")
     
-    # col1, col2 = st.columns([1, 2])
-    # with col1:
-    #     # Display Confusion Matrix
-    #     if st.checkbox('Show Confusion Matrix', key="confusion_matrix_checkbox"):
-    #         plt.figure(figsize=(6, 5))
-    #         sns.heatmap(st.session_state.confusion_matrix, annot=True, fmt='d', cmap='Blues', cbar=False, annot_kws={'size': 14})
-    #         plt.title('Confusion Matrix')
-    #         st.caption("Confusion Matrix")
-    #         st.pyplot(plt)
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        # Display Confusion Matrix
+        if st.checkbox('Show Confusion Matrix'):
+            plot_confusion_matrix(model, images, labels, classes)
     
-    # with col2:
-    #     # Display Classification Report
-    #     if st.checkbox('Show Classification Report', key="classification_report_checkbox"):
-    #         st.caption("Classification Report")
-    #         st.dataframe(st.session_state.classification_report)
-
-    # col1, col2 = st.columns([1, 2])
-    # with col1:
-    #     # Display Confusion Matrix
-    #     if st.checkbox('Show Confusion Matrix'):
-    #         plot_confusion_matrix(model, images, labels, classes)
-    
-    # with col2:
-    #     # Display Classification Report
-    #     if st.checkbox('Show Classification Report'):
-    #         display_classification_report(model, images, labels, classes)
+    with col2:
+        # Display Classification Report
+        if st.checkbox('Show Classification Report'):
+            display_classification_report(model, images, labels, classes)
 
 
 # Function to extract features and predictions from model
@@ -297,6 +245,95 @@ def make_saliency_map(img_tensor, model):
     saliency = saliency / saliency.max()
     return saliency
 
+# Saliency Map and GradCAM
+# def visualize_saliency_and_gradcam_map(model, image, idx_to_cls_names, image_names, layer_name="features.28"):
+#     model.eval()
+
+#     if isinstance(image, tuple):
+#         input_image, original_class_label, image_name = image
+#     else:
+#         input_image = image  # Handle case where 'image' might be a tensor directly
+
+#     # Convert the tensor to a NumPy array for display
+#     original_image = input_image.squeeze(0).permute(1, 2, 0).cpu().numpy()
+#     original_image = np.clip(original_image, 0, 1)
+#     original_image = np.uint8(255 * original_image)
+
+#     img_tensor = input_image.unsqueeze(0).to(device)
+#     img_tensor.requires_grad_()
+
+#     # Create Saliency Map
+#     saliency_map = make_saliency_map(img_tensor, model)
+#     saliency_map_colored = np.uint8(255 * saliency_map)
+#     saliency_map_colored = cv2.applyColorMap(saliency_map_colored, cv2.COLORMAP_JET)
+
+#     # Create Grad-CAM Heatmap
+#     heatmap, pred_cls = make_gradcam_heatmap(img_tensor, model, layer_name)
+#     cam_colored = np.uint8(255 * heatmap)
+#     cam_colored = cv2.resize(cam_colored, (original_image.shape[1], original_image.shape[0]))
+#     cam_colored = cv2.applyColorMap(cam_colored, cv2.COLORMAP_JET)
+#     cam_colored = cv2.cvtColor(cam_colored, cv2.COLOR_BGR2RGB)
+
+#     # Make the prediction
+#     outputs = model(input_image.unsqueeze(0).to(device))
+#     predicted_class = torch.argmax(outputs).item()
+
+#     st.markdown("---")
+#     # Display the selected image and its results
+#     st.markdown(f"Original Class: **:blue[{original_class_label}]**  | Predicted Class: **:green[{idx_to_cls_names[predicted_class]}]**")
+
+#     col1, col2 = st.columns([1, 2])
+#     with col1:
+#         if st.checkbox('Show Confusion Matrix'):
+#             images, labels, class_to_idx, classes, image_paths = load_images_from_test_folder(new_test_folder)
+#             plot_confusion_matrix(model, images, labels, classes)
+
+#     with col2:
+#         if st.checkbox('Show Classification Report'):
+#             images, labels, class_to_idx, classes, image_paths = load_images_from_test_folder(new_test_folder)
+#             display_classification_report(model, images, labels, classes)
+
+#     col1, col2, col3 = st.columns(3)
+#     with col1:
+#         st.subheader("Original Image")
+#         st.image(original_image, caption=f"Original Image - Label: {idx_to_cls_names[predicted_class]}", width=170)
+
+#     with col2:
+#         st.subheader("Saliency Map")
+#         saliency_map_colored_rgb = cv2.cvtColor(saliency_map_colored, cv2.COLOR_BGR2RGB)
+#         blended_saliency = cv2.addWeighted(saliency_map_colored_rgb, 0.6, original_image, 0.4, 0)
+#         st.image(blended_saliency, caption=f"Saliency Map - Label: {idx_to_cls_names[predicted_class]}", width=170)
+
+#     with col3:
+#         st.subheader("Grad-CAM")
+#         blended_gradcam = cv2.addWeighted(cam_colored, 0.6, original_image, 0.4, 0)
+#         st.image(blended_gradcam, caption=f"GradCAM - Label: {idx_to_cls_names[predicted_class]}", width=170)
+
+#     st.markdown("---")
+
+#     show_saliency_gradcam = st.checkbox("Show Generated Saliency and Grad-CAM Maps", value=False)
+
+#     if show_saliency_gradcam and input_img is not None:
+#         col1, col2 = st.columns(2)
+#         with col1:
+#             st.subheader("Saliency Map")
+#             st.image(saliency_map_colored_rgb, caption=f"Saliency Map: {idx_to_cls_names[predicted_class]}", width=250)
+
+#         with col2:
+#             st.subheader("Grad-CAM Heatmap")
+#             dpi = 100
+#             width_in_inches = 2
+#             height_in_inches = width_in_inches
+#             fig, ax = plt.subplots(figsize=(width_in_inches, height_in_inches), dpi=dpi)
+#             ax.imshow(heatmap, cmap='jet')
+#             ax.axis('off')
+#             buf = BytesIO()
+#             fig.savefig(buf, format="png", bbox_inches='tight', pad_inches=0)
+#             buf.seek(0)
+#             st.image(buf, caption=f"Grad-CAM Heatmap: {idx_to_cls_names[predicted_class]}", width=250)
+#             plt.close(fig)
+
+
 def generate_saliency_map(model, img_tensor, original_image, predicted_class, idx_to_cls_names):
     """
     Generates and displays the Saliency Map.
@@ -315,13 +352,12 @@ def generate_saliency_map(model, img_tensor, original_image, predicted_class, id
 
         col1, col2,col3 = st.columns(3)
         with col1:
-            st.subheader("Raw Map")
-            st.image(saliency_map_colored_rgb, caption=f"Raw Saliency Map - Label: {idx_to_cls_names[predicted_class]}", width=170)
+            st.subheader("Saliency Map")
+            st.image(blended_saliency, caption=f"Saliency Map - Label: {idx_to_cls_names[predicted_class]}", width=170)
         
         with col2:
             # Optional: Display raw Saliency Map
-            st.subheader("Saliency Map")
-            st.image(blended_saliency, caption=f"Saliency Map - Label: {idx_to_cls_names[predicted_class]}", width=170)
+            st.image(saliency_map_colored_rgb, caption=f"Raw Saliency Map - Label: {idx_to_cls_names[predicted_class]}", width=250)
 
 
 def generate_gradcam(model, img_tensor, original_image, predicted_class, idx_to_cls_names, layer_name="features.28"):
@@ -344,6 +380,40 @@ def visualize_gradcam_map(model, image, idx_to_cls_names, image_names, img_tenso
     """
     Main function to visualize Original Image, Grad-CAM Heatmap, and Blended Grad-CAM.
     """
+    # model.eval()
+
+    # if isinstance(image, tuple):
+    #     input_image, original_class_label, image_name = image
+    # else:
+    #     input_image = image  # Handle case where 'image' might be a tensor directly
+
+    # # Convert the tensor to a NumPy array for display
+    # original_image = input_image.squeeze(0).permute(1, 2, 0).cpu().numpy()
+    # original_image = np.clip(original_image, 0, 1)
+    # original_image = np.uint8(255 * original_image)
+
+    # img_tensor = input_image.unsqueeze(0).to(device)
+    # img_tensor.requires_grad_()
+
+    # # Make the prediction
+    # outputs = model(input_image.unsqueeze(0).to(device))
+    # predicted_class = torch.argmax(outputs).item()
+
+    # st.markdown("---")
+    # # Display the selected image and its results
+    # st.markdown(f"Original Class: **:blue[{original_class_label}]**  | Predicted Class: **:green[{idx_to_cls_names[predicted_class]}]**")
+
+    # # Display Confusion Matrix and Classification Report
+    # col1, col2 = st.columns([1, 2])
+    # with col1:
+    #     if st.checkbox('Show Confusion Matrix'):
+    #         images, labels, class_to_idx, classes, image_paths = load_images_from_test_folder(new_test_folder)
+    #         plot_confusion_matrix(model, images, labels, classes)
+
+    # with col2:
+    #     if st.checkbox('Show Classification Report'):
+    #         images, labels, class_to_idx, classes, image_paths = load_images_from_test_folder(new_test_folder)
+    #         display_classification_report(model, images, labels, classes)
 
     # Generate Grad-CAM and Heatmap
     heatmap, blended_gradcam = generate_gradcam(model, img_tensor, original_image, predicted_class, idx_to_cls_names, layer_name)
@@ -372,6 +442,92 @@ def visualize_gradcam_map(model, image, idx_to_cls_names, image_names, img_tenso
         st.subheader("Grad-CAM")
         st.image(blended_gradcam, caption=f"Blended Grad-CAM - Label: {idx_to_cls_names[predicted_class]}", width=170)
 
+   
+
+def main_visualization(model, image, idx_to_cls_names, image_names, layer_name="features.28"):
+    model.eval()
+
+    if isinstance(image, tuple):
+        input_image, original_class_label, image_name = image
+    else:
+        input_image = image  # Handle case where 'image' might be a tensor directly
+
+    # Convert the tensor to a NumPy array for display
+    original_image = input_image.squeeze(0).permute(1, 2, 0).cpu().numpy()
+    original_image = np.clip(original_image, 0, 1)
+    original_image = np.uint8(255 * original_image)
+
+    img_tensor = input_image.unsqueeze(0).to(device)
+    img_tensor.requires_grad_()
+
+    # Make the prediction
+    outputs = model(input_image.unsqueeze(0).to(device))
+    predicted_class = torch.argmax(outputs).item()
+
+    # performance
+    display_model_performance(model,original_class_label, idx_to_cls_names,predicted_class)
+    # gradcam
+    visualize_gradcam_map(model, image, idx_to_cls_names, image_names, img_tensor, original_image, predicted_class, original_class_label, layer_name="features.28", )
+    #lime
+    explain_with_lime(model, input_img, idx_to_cls_names)
+
+    st.markdown("---")
+    # saliency map
+    generate_saliency_map(model, img_tensor, original_image, predicted_class, idx_to_cls_names)
+    
+
+# def visualize_saliency_and_gradcam_map(model, image, idx_to_cls_names, image_names, layer_name="features.28"):
+#     """
+#     Main function to visualize Saliency Map and Grad-CAM.
+#     """
+#     model.eval()
+
+#     if isinstance(image, tuple):
+#         input_image, original_class_label, image_name = image
+#     else:
+#         input_image = image  # Handle case where 'image' might be a tensor directly
+
+#     # Convert the tensor to a NumPy array for display
+#     original_image = input_image.squeeze(0).permute(1, 2, 0).cpu().numpy()
+#     original_image = np.clip(original_image, 0, 1)
+#     original_image = np.uint8(255 * original_image)
+
+#     img_tensor = input_image.unsqueeze(0).to(device)
+#     img_tensor.requires_grad_()
+
+#     # Make the prediction
+#     outputs = model(input_image.unsqueeze(0).to(device))
+#     predicted_class = torch.argmax(outputs).item()
+
+#     st.markdown("---")
+#     # Display the selected image and its results
+#     st.markdown(f"Original Class: **:blue[{original_class_label}]**  | Predicted Class: **:green[{idx_to_cls_names[predicted_class]}]**")
+
+#     # Display Confusion Matrix and Classification Report
+#     col1, col2 = st.columns([1, 2])
+#     with col1:
+#         if st.checkbox('Show Confusion Matrix'):
+#             images, labels, class_to_idx, classes, image_paths = load_images_from_test_folder(new_test_folder)
+#             plot_confusion_matrix(model, images, labels, classes)
+
+#     with col2:
+#         if st.checkbox('Show Classification Report'):
+#             images, labels, class_to_idx, classes, image_paths = load_images_from_test_folder(new_test_folder)
+#             display_classification_report(model, images, labels, classes)
+
+#     # Display Saliency Map and Grad-CAM
+#     col1, col2, col3 = st.columns(3)
+#     with col1:
+#         st.subheader("Original Image")
+#         st.image(original_image, caption=f"Original Image - Label: {idx_to_cls_names[predicted_class]}", width=170)
+
+#     # with col2:
+#         # generate_saliency_map(model, img_tensor, original_image, predicted_class, idx_to_cls_names)
+
+#     with col2:
+#         generate_gradcam(model, img_tensor, original_image, predicted_class, idx_to_cls_names, layer_name)
+
+#     st.markdown("---")
 
 # LIME
 def model_predict(images):
@@ -397,21 +553,14 @@ def explain_with_lime(model, image, idx_to_cls_names):
 
     explainer = lime_image.LimeImageExplainer()
 
-    if st.session_state.lime_explanation is None:
-        explainer = lime_image.LimeImageExplainer()
-
-        with st.spinner('Generating LIME explanation...'):
-            explanation = explainer.explain_instance(
-                original_image, model_predict, 
-                top_labels=2, hide_color=0,
-                num_samples=1000,
-                distance_metric='cosine'
-            )
-        st.session_state.lime_explanation = explanation
-    else:
-        # Use the cached explanation
-        explanation = st.session_state.lime_explanation
-
+    with st.spinner('Generating LIME explanation...'):
+        explanation = explainer.explain_instance(
+            original_image, model_predict, 
+            top_labels=2, hide_color=0,
+            num_samples=1000,
+            distance_metric='cosine'
+        )
+    
     col1, col2, col3= st.columns(3)
     with col1:
         temp, mask = explanation.get_image_and_mask(
@@ -457,46 +606,7 @@ def explain_with_lime(model, image, idx_to_cls_names):
         st.image(blended_image, caption="LIME Explanation (Blended)", width=170)
 
 
-def main_visualization(model, image, idx_to_cls_names, image_names, layer_name="features.28"):
-    model.eval()
-
-    if isinstance(image, tuple):
-        input_image, original_class_label, image_name = image
-    else:
-        input_image = image  # Handle case where 'image' might be a tensor directly
-
-    # Convert the tensor to a NumPy array for display
-    original_image = input_image.squeeze(0).permute(1, 2, 0).cpu().numpy()
-    original_image = np.clip(original_image, 0, 1)
-    original_image = np.uint8(255 * original_image)
-
-    img_tensor = input_image.unsqueeze(0).to(device)
-    img_tensor.requires_grad_()
-
-    # Make the prediction
-    outputs = model(input_image.unsqueeze(0).to(device))
-    # probabilities = torch.nn.functional.softmax(outputs, dim=1)
-    predicted_class = torch.argmax(outputs).item()
-    # confidence_score = probabilities[0][predicted_class].item() 
-    # st.write(f"**Confidence Score:** {confidence_score * 100:.2f}%")
-
-
-    # performance
-    display_model_performance(model,original_class_label, idx_to_cls_names,predicted_class)
-    # gradcam
-    visualize_gradcam_map(model, image, idx_to_cls_names, image_names, img_tensor, original_image, predicted_class, original_class_label, layer_name )
-    #lime
-    explain_with_lime(model, input_img, idx_to_cls_names)
-
-    st.markdown("---")
-
-    st.subheader("Explanation for GradCAM and LIME:")
-    st.markdown("**GradCAM:**  Warmer colors such as red and yellow indicate areas with higher influence on the decision, green color regions are still relevant but contribute less significantly to the prediction, while cooler colors like blue represent regions with minimal impact. " )
-    st.markdown("**LIME:** The image is break into superpixels and identify which segments positively contributed to the prediction. Positive superpixels which highlighted in green represent areas that support the model's classification such as regions showing clear signs of normal or pneumonia." )
-    # saliency map
-    # generate_saliency_map(model, img_tensor, original_image, predicted_class, idx_to_cls_names)
-
-
+    
 
 # Main App Structure
 images, class_to_idx, classes, image_paths = load_images_from_demo_folder(new_demo_folder)
@@ -515,16 +625,7 @@ def set_image_selected(i):
 def on_file_changed():
     st.session_state['image_selected'] = -1
 
-if "lime_explanation" not in st.session_state:
-    st.session_state.lime_explanation = None
-    
-if "confusion_matrix" not in st.session_state:
-    st.session_state.confusion_matrix = None
-
-if "classification_report" not in st.session_state:
-    st.session_state.classification_report = None
-
-st.title(f"Pneumonia X-Ray Classification - Grad-CAM & LIME Visualization")
+st.title(f"Pneumonia X-Ray Classification - Saliency & Grad-CAM Visualization")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -539,7 +640,7 @@ with col1:
     # Extract all convolutional layers
     layers = [name for name, module in model.named_modules() if isinstance(module, torch.nn.Conv2d)]
     layer_name = st.selectbox("Select Convolutional Layer for Grad-CAM", layers, index=len(layers)-1)
-    st.caption("** The selection only applicable to AI Engineers. Others please use default layer: feature.28")
+    st.caption("* Please use default layer: feature.28")
 
 with col2:
     uploaded_image = st.file_uploader("Upload an X-Ray Image", type=["jpg", "png", "jpeg"],on_change=on_file_changed)
@@ -548,23 +649,21 @@ with col2:
 if st.session_state['image_selected'] > -1:
     image_selected = st.session_state['image_selected']
     input_img = images[image_selected]
-    # Reset LIME explanation when a new image is selected
-    st.session_state.lime_explanation = None
-    # st.session_state.confusion_matrix = None
-    # st.session_state.classification_report = None
 
 if uploaded_image is not None:
     preprocessed_image = preprocess_image(uploaded_image)
     input_img = (preprocessed_image,"-","uploaded_image")
-    st.session_state.lime_explanation = None
-    # st.session_state.confusion_matrix = None
-    # st.session_state.classification_report = None
 
 if input_img is not None:
     main_visualization(model, input_img, idx_to_cls_names, image_paths, layer_name)
     # visualize_gradcam_map(model, input_img, idx_to_cls_names, image_paths, layer_name)
 
     # saliency option
+    
+   
+      
+        
+
 
 
 # Main execution
