@@ -59,9 +59,7 @@ def load_model():
     gdown.download(url, output_path, quiet=False)
     model.load_state_dict(torch.load('vgg16_pneumonia_model.pth', map_location=torch.device('cpu')))
 
-
-    # model.load_state_dict(torch.load('./vgg16_pneumonia_model.pth', map_location=torch.device('cpu')))
-    model.eval()  # Set the model to evaluation mode
+    model.eval() 
     return model
 
 model = load_model() 
@@ -111,7 +109,7 @@ def display_title(model, original_class_label, idx_to_cls_names,predicted_class)
     st.markdown("---")
     st.markdown(f"Original Class: **:blue[{original_class_label}]**  | Predicted Class: **:green[{idx_to_cls_names[predicted_class]}]**")
 
-
+# GradCAM
 def get_model_outputs(model, img_tensor, layer_name):
     model.eval()
     return_nodes = {
@@ -137,39 +135,6 @@ def make_gradcam_heatmap(trans_img, model, last_layer_name):
     heatmap = heatmap.clamp(min=0.) / heatmap.max()
     hook.remove()
     return heatmap.cpu().numpy(), int(pred_index.detach())
-
-def make_saliency_map(img_tensor, model):
-    model.eval()
-    img_tensor.requires_grad_()
-    output = model(img_tensor)
-    pred_index = torch.argmax(output, dim=1)
-    model.zero_grad()
-    output[0, pred_index].backward()
-    saliency, _ = torch.max(img_tensor.grad.data.abs(), dim=1)
-    saliency = saliency.squeeze().cpu().numpy()
-    saliency = np.maximum(saliency, 0)
-    saliency = saliency / saliency.max()
-    return saliency
-
-def generate_saliency_map(model, img_tensor, original_image, predicted_class, idx_to_cls_names):
-    saliency_map = make_saliency_map(img_tensor, model)
-    saliency_map_colored = np.uint8(255 * saliency_map)
-    saliency_map_colored = cv2.applyColorMap(saliency_map_colored, cv2.COLORMAP_JET)
-    saliency_map_colored_rgb = cv2.cvtColor(saliency_map_colored, cv2.COLOR_BGR2RGB)
-    
-    blended_saliency = cv2.addWeighted(saliency_map_colored_rgb, 0.6, original_image, 0.4, 0)
-    
-    if st.checkbox("Show Raw Saliency Map"):
-
-        col1, col2,col3 = st.columns(3)
-        with col1:
-            st.subheader("Raw Map")
-            st.image(saliency_map_colored_rgb, caption=f"Raw Saliency Map - Label: {idx_to_cls_names[predicted_class]}", width=170)
-        
-        with col2:
-            st.subheader("Saliency Map")
-            st.image(blended_saliency, caption=f"Saliency Map - Label: {idx_to_cls_names[predicted_class]}", width=170)
-
 
 def generate_gradcam(model, img_tensor, original_image, predicted_class, idx_to_cls_names, layer_name="features.28"):
     heatmap, pred_cls = make_gradcam_heatmap(img_tensor, model, layer_name)
@@ -282,6 +247,40 @@ def explain_with_lime(model, image, idx_to_cls_names):
         
         st.subheader("LIME")
         st.image(blended_image, caption="LIME Explanation (Blended)", width=170)
+
+
+# opt - Saliency map
+def make_saliency_map(img_tensor, model):
+    model.eval()
+    img_tensor.requires_grad_()
+    output = model(img_tensor)
+    pred_index = torch.argmax(output, dim=1)
+    model.zero_grad()
+    output[0, pred_index].backward()
+    saliency, _ = torch.max(img_tensor.grad.data.abs(), dim=1)
+    saliency = saliency.squeeze().cpu().numpy()
+    saliency = np.maximum(saliency, 0)
+    saliency = saliency / saliency.max()
+    return saliency
+
+def generate_saliency_map(model, img_tensor, original_image, predicted_class, idx_to_cls_names):
+    saliency_map = make_saliency_map(img_tensor, model)
+    saliency_map_colored = np.uint8(255 * saliency_map)
+    saliency_map_colored = cv2.applyColorMap(saliency_map_colored, cv2.COLORMAP_JET)
+    saliency_map_colored_rgb = cv2.cvtColor(saliency_map_colored, cv2.COLOR_BGR2RGB)
+    
+    blended_saliency = cv2.addWeighted(saliency_map_colored_rgb, 0.6, original_image, 0.4, 0)
+    
+    if st.checkbox("Show Raw Saliency Map"):
+
+        col1, col2,col3 = st.columns(3)
+        with col1:
+            st.subheader("Raw Map")
+            st.image(saliency_map_colored_rgb, caption=f"Raw Saliency Map - Label: {idx_to_cls_names[predicted_class]}", width=170)
+        
+        with col2:
+            st.subheader("Saliency Map")
+            st.image(blended_saliency, caption=f"Saliency Map - Label: {idx_to_cls_names[predicted_class]}", width=170)
 
 
 def main_visualization(model, image, idx_to_cls_names, image_names, layer_name="features.28"):
